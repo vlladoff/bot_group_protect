@@ -1,0 +1,233 @@
+package telegram
+
+import (
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/vlladoff/bot_group_protect/internal/config"
+	"log"
+	"math/rand"
+	"strconv"
+	"time"
+)
+
+type (
+	ProtectBot struct {
+		Client   *tgbotapi.BotAPI
+		Settings config.BotSettings
+		NewUsers *map[int64]*User
+	}
+	User struct {
+		NeedToAnswer     string
+		MessagesToDelete []int
+		ChatId           int64
+		UserName         string
+		UserNickName     string
+		UserId           int64
+		CancelBan        *bool
+	}
+)
+
+func (pb *ProtectBot) StartBot() {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+	newUsers := make(map[int64]*User)
+	pb.NewUsers = &newUsers
+
+	updates := pb.Client.GetUpdatesChan(u)
+	for update := range updates {
+		if update.Message != nil {
+			//new member joined
+			if update.Message.NewChatMembers != nil {
+				for _, member := range update.Message.NewChatMembers {
+					newUser := pb.StartChallenge(update)
+					(*pb.NewUsers)[member.ID] = newUser
+				}
+			}
+		}
+
+		//check new member answer
+		if update.CallbackQuery != nil {
+			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
+				if update.CallbackQuery.Data == user.NeedToAnswer {
+					pb.EndChallenge(user)
+					//resp, _ := pb.Client.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "👍"))
+					//user.MessagesToDelete = append(user.MessagesToDelete, resp.MessageID)
+					pb.ClearUserMessages(user)
+				} else {
+					//resp, _ := pb.Client.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "👎"))
+					//user.MessagesToDelete = append(user.MessagesToDelete, resp.MessageID)
+				}
+			}
+		}
+	}
+}
+
+var emojiMap = map[string]string{
+	"смайл":       "🙂",
+	"рукопожатие": "🤝",
+	"глаза":       "👀",
+	"зонтик":      "☂️",
+	"очки":        "👓",
+	"перчатки":    "🧤",
+	"кепка":       "🧢",
+	"кольцо":      "💍",
+	"носки":       "🧦",
+	"мышь":        "🐭",
+	"единорог":    "🦄",
+	"попугай":     "🦜",
+	"фламинго":    "🦩",
+	"заяц":        "🐇",
+	"слон":        "🐘",
+	"бабочка":     "🦋",
+	"улитка":      "🐌",
+	"муха":        "🪰",
+	"дельфин":     "🐬",
+	"крокодил":    "🐊",
+	"кактус":      "🌵",
+	"ель":         "🌲",
+	"клевер":      "☘️",
+	"цветок":      "🌸",
+	"месяц":       "🌙",
+	"звезда":      "⭐️",
+	"облако":      "☁️",
+	"огонь":       "🔥",
+	"радуга":      "🌈",
+	"снежинка":    "❄️",
+	"клубника":    "🍓",
+	"банан":       "🍌",
+	"яблоко":      "🍏",
+	"авокадо":     "🥑",
+	"баклажан":    "🍆",
+	"мяч":         "⚽️",
+	"бумеранг":    "🪃",
+	"гитара":      "🎸",
+	"велосипед":   "🚲",
+	"ракета":      "🚀",
+	"палатка":     "⛺️",
+	"топор":       "🪓",
+	"шарик":       "🎈",
+	"стул":        "🪑",
+	"скрепка":     "📎",
+	"ножницы":     "✂️",
+	"карандаш":    "✏️",
+	"лупа":        "🔍",
+	"сигарета":    "🚬",
+	"ключ":        "🔑",
+	"сердечко":    "❤️",
+}
+
+func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
+	emojiKey := PickRandEmojiKey()
+	emojiKeyFake := PickRandEmojiKey()
+	emojiKeyFake2 := PickRandEmojiKey()
+
+	var buttons []tgbotapi.InlineKeyboardButton
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKey], emojiMap[emojiKey]))
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake], emojiMap[emojiKeyFake]))
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake2], emojiMap[emojiKeyFake2]))
+
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(buttons), func(i, j int) { buttons[i], buttons[j] = buttons[j], buttons[i] })
+
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"**"+emojiKey+"**")
+	msg.ReplyToMessageID = update.Message.MessageID
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(buttons...))
+	resp, _ := pb.Client.Send(msg)
+
+	cancelBan := false
+	newUser := User{
+		NeedToAnswer: emojiMap[emojiKey],
+		ChatId:       update.Message.Chat.ID,
+		UserId:       update.Message.From.ID,
+		UserName:     update.Message.From.FirstName + " " + update.Message.From.LastName,
+		UserNickName: update.Message.From.UserName,
+		CancelBan:    &cancelBan,
+	}
+	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
+
+	go pb.WaitAndBan(&newUser)
+
+	return &newUser
+}
+
+func PickRandEmojiKey() string {
+	k := rand.Intn(len(emojiMap))
+
+	for key := range emojiMap {
+		if k == 0 {
+			return key
+		}
+		k--
+	}
+
+	return "мяч"
+}
+
+func (pb *ProtectBot) EndChallenge(user *User) {
+	cancelBan := true
+	user.CancelBan = &cancelBan
+}
+
+func (pb *ProtectBot) WaitAndBan(user *User) {
+	time.Sleep(time.Second * time.Duration(pb.Settings.ChallengeTime))
+
+	defer pb.DeleteUser(user)
+	defer pb.SendUserStatusToAdmin(user)
+
+	if *user.CancelBan {
+		return
+	}
+
+	if ok := pb.BanUser(user.ChatId, user.UserId); ok {
+		log.Printf("User: %v was banned in chat: %v for: %v minutes", user.UserId, user.ChatId, pb.Settings.BanTime)
+	}
+
+	pb.ClearUserMessages(user)
+}
+
+func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
+	banChatMemberConfig := tgbotapi.BanChatMemberConfig{
+		ChatMemberConfig: tgbotapi.ChatMemberConfig{
+			ChatID: chatId,
+			UserID: memberId,
+		},
+		RevokeMessages: true,
+	}
+
+	if pb.Settings.BanTime != 0 {
+		banChatMemberConfig.UntilDate = time.Now().Add(time.Minute * time.Duration(pb.Settings.BanTime)).Unix()
+	}
+
+	_, err := pb.Client.Request(banChatMemberConfig)
+	if err != nil {
+		return false
+	}
+
+	return true
+}
+
+func (pb *ProtectBot) ClearUserMessages(user *User) {
+	for _, msg := range user.MessagesToDelete {
+		go pb.Client.Request(tgbotapi.NewDeleteMessage(user.ChatId, msg))
+	}
+}
+
+func (pb *ProtectBot) DeleteUser(user *User) {
+	if _, ok := (*pb.NewUsers)[user.UserId]; ok {
+		delete(*pb.NewUsers, user.UserId)
+	}
+}
+
+func (pb *ProtectBot) SendUserStatusToAdmin(user *User) {
+	msg := "Пользователь " + user.UserName + " @" + user.UserNickName
+	if *user.CancelBan {
+		msg += " прошёл проверку спама в группе: " + strconv.Itoa(int(user.ChatId))
+	} else {
+		msg += " был забанен в группе: " + strconv.Itoa(int(user.ChatId))
+	}
+
+	pb.SendMessageToAdmin(msg)
+}
+
+func (pb *ProtectBot) SendMessageToAdmin(msg string) {
+	pb.Client.Send(tgbotapi.NewMessage(pb.Settings.AdminChatId, msg))
+}
