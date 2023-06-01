@@ -8,19 +8,19 @@ import (
 )
 
 func main() {
-	config, err := config.LoadConfig(".")
+	cfg, err := config.LoadConfig(".")
 	if err != nil {
-		log.Fatal("cannot load config:", err)
+		log.Fatal("cannot load cfg:", err)
 	}
 
 	var tg telegram.ProtectBot
-	bot, err := tgbotapi.NewBotAPI(config.BotToken)
+	bot, err := tgbotapi.NewBotAPI(cfg.BotToken)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	tg.Client = bot
-	tg.Settings = config.BotSettings
+	tg.Settings = cfg.BotSettings
 
 	tg.StartBot()
 }
