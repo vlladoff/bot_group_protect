@@ -116,21 +116,11 @@ var emojiMap = map[string]string{
 }
 
 func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
-	emojiKey := PickRandEmojiKey()
-	emojiKeyFake := PickRandEmojiKey()
-	emojiKeyFake2 := PickRandEmojiKey()
-
-	var buttons []tgbotapi.InlineKeyboardButton
-	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKey], emojiMap[emojiKey]))
-	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake], emojiMap[emojiKeyFake]))
-	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake2], emojiMap[emojiKeyFake2]))
-
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(buttons), func(i, j int) { buttons[i], buttons[j] = buttons[j], buttons[i] })
+	emojiKey, keyboard := GenerateKeyboard()
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"**"+emojiKey+"**")
 	msg.ReplyToMessageID = update.Message.MessageID
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(buttons...))
+	msg.ReplyMarkup = keyboard
 	resp, _ := pb.Client.Send(msg)
 
 	cancelBan := false
@@ -147,6 +137,22 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	go pb.WaitAndBan(&newUser)
 
 	return &newUser
+}
+
+func GenerateKeyboard() (string, tgbotapi.InlineKeyboardMarkup) {
+	emojiKey := PickRandEmojiKey()
+	emojiKeyFake := PickRandEmojiKey()
+	emojiKeyFake2 := PickRandEmojiKey()
+
+	var buttons []tgbotapi.InlineKeyboardButton
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKey], emojiMap[emojiKey]))
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake], emojiMap[emojiKeyFake]))
+	buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(emojiMap[emojiKeyFake2], emojiMap[emojiKeyFake2]))
+
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(buttons), func(i, j int) { buttons[i], buttons[j] = buttons[j], buttons[i] })
+
+	return emojiKey, tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(buttons...))
 }
 
 func PickRandEmojiKey() string {
