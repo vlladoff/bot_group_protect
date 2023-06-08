@@ -1,6 +1,6 @@
 name: deploy to aws
 
-on: [workflow_dispatch]
+on: [push]
 
 jobs:
   deploy:
