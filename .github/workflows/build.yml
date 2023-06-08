@@ -14,14 +14,10 @@ jobs:
           go-version: '1.18'
 
       - name: Build
-        run: env GOOS=linux GOARCH=amd64 go build -o ${{ github.workspace }}/tg_bots/bgp cmd/bot/main.go
+        run: env GOOS=linux GOARCH=amd64 go build -o bgp cmd/bot/main.go
 
-  upload:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v2
         with:
           name: BGPArtifact
-          path: ${{ github.workspace }}/tg_bots/bgp
+          path: ./bgp
