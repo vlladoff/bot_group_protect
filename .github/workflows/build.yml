@@ -15,7 +15,7 @@ jobs:
           go-version: '1.18'
 
       - name: Build
-        run: env GOOS=linux GOARCH=amd64 go build cmd/bot/main.go -o bgp
+        run: env GOOS=linux GOARCH=amd64 go build -o bgp cmd/bot/main.go
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
