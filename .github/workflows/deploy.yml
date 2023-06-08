@@ -5,14 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  wait:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait
-        run: echo "Wait to deploy..."
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Download Artifact
