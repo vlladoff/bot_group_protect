@@ -1,0 +1,25 @@
+name: deploy to aws
+
+on: [workflow_dispatch]
+
+jobs:
+  deploy:
+    #if: github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: BGPArtifact
+          path: tg_bots
+
+      - name: Copy to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ github.event.repository.private_key }}
+          source: "tg_bots/bgp"
+          target: ${{ secrets.SERVER_DEPLOY_PATH }}
