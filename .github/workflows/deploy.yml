@@ -23,6 +23,6 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ github.event.repository.private_key }}
+          key: ${{ secrets.SERVER_PRIVATE_KEY }}
           source: "bgp"
           target: ${{ secrets.SERVER_DEPLOY_PATH }}
