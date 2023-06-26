@@ -26,5 +26,4 @@ jobs:
           key: ${{ secrets.SERVER_PRIVATE_KEY }}
           source: "bgp"
           target: ${{ secrets.SERVER_DEPLOY_PATH }}
-          script: |
-            chmod +x "${{ secrets.SERVER_DEPLOY_PATH }}/bgp"
+          command: chmod +x "${{ secrets.SERVER_DEPLOY_PATH }}/bgp"
