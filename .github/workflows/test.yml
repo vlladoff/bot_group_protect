@@ -1,0 +1,33 @@
+name: test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: deploy artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - run: echo hello > world.txt
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: my-artifact
+          path: world.txt
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: my-artifact
+          path: distfiles
+
+      - name: copy file to server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_PRIVATE_KEY }}
+          source: distfiles/*
+          target: ${{ secrets.SERVER_DEPLOY_PATH }}
