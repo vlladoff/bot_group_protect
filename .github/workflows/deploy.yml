@@ -24,5 +24,5 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ github.event.repository.private_key }}
-          source: "tg_bots/bgp"
+          source: "bgp"
           target: ${{ secrets.SERVER_DEPLOY_PATH }}
