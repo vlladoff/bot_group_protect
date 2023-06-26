@@ -15,9 +15,3 @@ jobs:
 
       - name: Build
         run: env GOOS=linux GOARCH=amd64 go build -o bgp cmd/bot/main.go
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: BGPArtifact
-          path: ./bgp
