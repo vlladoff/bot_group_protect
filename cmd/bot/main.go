@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/vlladoff/bot_group_protect/internal/config"
 	"github.com/vlladoff/bot_group_protect/internal/telegram"
@@ -8,12 +9,12 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadConfig(".")
+	configPath := flag.String("cfg", ".", "config path")
+	flag.Parse()
+
+	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		cfg, err = config.LoadFromEnv()
-		if err != nil {
-			log.Fatal("cannot load cfg:", err)
-		}
+		log.Fatal("cannot load cfg:", err)
 	}
 
 	var tg telegram.ProtectBot
