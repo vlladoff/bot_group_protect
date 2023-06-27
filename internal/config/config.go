@@ -30,3 +30,10 @@ func LoadConfig(path string) (config Settings, err error) {
 
 	return
 }
+
+func LoadFromEnv() (config Settings, err error) {
+	viper.AutomaticEnv()
+	err = viper.Unmarshal(&config)
+
+	return
+}

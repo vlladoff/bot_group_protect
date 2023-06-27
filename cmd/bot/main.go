@@ -10,7 +10,10 @@ import (
 func main() {
 	cfg, err := config.LoadConfig(".")
 	if err != nil {
-		log.Fatal("cannot load cfg:", err)
+		cfg, err = config.LoadFromEnv()
+		if err != nil {
+			log.Fatal("cannot load cfg:", err)
+		}
 	}
 
 	var tg telegram.ProtectBot
