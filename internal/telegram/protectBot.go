@@ -119,6 +119,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	emojiKey, keyboard := GenerateKeyboard()
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"**"+emojiKey+"**")
+	msg.ParseMode = "markdown"
 	msg.ReplyToMessageID = update.Message.MessageID
 	msg.ReplyMarkup = keyboard
 	resp, _ := pb.Client.Send(msg)
