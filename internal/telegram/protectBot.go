@@ -38,8 +38,10 @@ func (pb *ProtectBot) StartBot() {
 			//new member joined
 			if update.Message.NewChatMembers != nil {
 				for _, member := range update.Message.NewChatMembers {
-					newUser := pb.StartChallenge(update)
-					(*pb.NewUsers)[member.ID] = newUser
+					if member.ID == update.Message.From.ID {
+						newUser := pb.StartChallenge(update)
+						(*pb.NewUsers)[member.ID] = newUser
+					}
 				}
 			}
 		}
@@ -49,12 +51,7 @@ func (pb *ProtectBot) StartBot() {
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
 					pb.EndChallenge(user)
-					//resp, _ := pb.Client.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "👍"))
-					//user.MessagesToDelete = append(user.MessagesToDelete, resp.MessageID)
 					pb.ClearUserMessages(user)
-				} else {
-					//resp, _ := pb.Client.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "👎"))
-					//user.MessagesToDelete = append(user.MessagesToDelete, resp.MessageID)
 				}
 			}
 		}
@@ -118,7 +115,7 @@ var emojiMap = map[string]string{
 func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	emojiKey, keyboard := GenerateKeyboard()
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"**"+emojiKey+"**")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"***\""+emojiKey+"\"***")
 	msg.ParseMode = "markdown"
 	msg.ReplyToMessageID = update.Message.MessageID
 	msg.ReplyMarkup = keyboard
