@@ -9,6 +9,7 @@ type (
 	}
 	BotSettings struct {
 		WelcomeMessage string `mapstructure:"TG_BOT_GROUP_PROTECT_WELCOME_MESSAGE"`
+		SuccessMessage string `mapstructure:"TG_BOT_GROUP_PROTECT_SUCCESS_MESSAGE"`
 		ChallengeTime  int32  `mapstructure:"TG_BOT_GROUP_PROTECT_CHALLENGE_TIME"`
 		BanTime        int64  `mapstructure:"TG_BOT_GROUP_PROTECT_BAN_TIME"` // 0 - forever
 		AdminChatId    int64  `mapstructure:"TG_BOT_GROUP_PROTECT_ADMIN_CHAT_ID"`
