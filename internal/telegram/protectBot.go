@@ -44,6 +44,11 @@ func (pb *ProtectBot) StartBot() {
 					}
 				}
 			}
+
+			//delete banned user message
+			if update.Message.LeftChatMember != nil && update.Message.From.UserName == pb.Settings.HimselfUserName {
+				go pb.Client.Request(tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID))
+			}
 		}
 
 		//check new member answer
@@ -55,11 +60,6 @@ func (pb *ProtectBot) StartBot() {
 					pb.SendSuccessMessage(user.ChatId)
 				}
 			}
-		}
-
-		//delete banned user message
-		if update.Message.LeftChatMember != nil && update.Message.From.UserName == pb.Settings.HimselfUserName {
-			go pb.Client.Request(tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID))
 		}
 	}
 }
@@ -119,6 +119,8 @@ var emojiMap = map[string]string{
 }
 
 func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
+	pb.DisallowUserSendMessages(update.Message.Chat.ID, update.Message.From.ID)
+
 	emojiKey, keyboard := GenerateKeyboard()
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage+"***\""+emojiKey+"\"***")
@@ -178,6 +180,8 @@ func PickRandEmojiKey() string {
 func (pb *ProtectBot) EndChallenge(user *User) {
 	cancelBan := true
 	user.CancelBan = &cancelBan
+
+	pb.AllowUserSendMessages(user.ChatId, user.UserId)
 }
 
 func (pb *ProtectBot) WaitAndBan(user *User) {
@@ -233,6 +237,40 @@ func (pb *ProtectBot) DeleteUser(user *User) {
 	if _, ok := (*pb.NewUsers)[user.UserId]; ok {
 		delete(*pb.NewUsers, user.UserId)
 	}
+}
+
+func (pb *ProtectBot) DisallowUserSendMessages(chatId, memberId int64) {
+	restrictConfig := tgbotapi.RestrictChatMemberConfig{
+		ChatMemberConfig: tgbotapi.ChatMemberConfig{
+			ChatID: chatId,
+			UserID: memberId,
+		},
+		Permissions: &tgbotapi.ChatPermissions{
+			CanSendMessages:      true,
+			CanSendMediaMessages: true,
+			CanSendPolls:         true,
+			CanSendOtherMessages: true,
+		},
+	}
+
+	go pb.Client.Request(restrictConfig)
+}
+
+func (pb *ProtectBot) AllowUserSendMessages(chatId, memberId int64) {
+	restrictConfig := tgbotapi.RestrictChatMemberConfig{
+		ChatMemberConfig: tgbotapi.ChatMemberConfig{
+			ChatID: chatId,
+			UserID: memberId,
+		},
+		Permissions: &tgbotapi.ChatPermissions{
+			CanSendMessages:      true,
+			CanSendMediaMessages: true,
+			CanSendPolls:         true,
+			CanSendOtherMessages: true,
+		},
+	}
+
+	go pb.Client.Request(restrictConfig)
 }
 
 func (pb *ProtectBot) SendUserStatusToAdmin(user *User) {
