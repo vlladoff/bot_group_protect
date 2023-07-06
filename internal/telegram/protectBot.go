@@ -51,10 +51,15 @@ func (pb *ProtectBot) StartBot() {
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
 					pb.EndChallenge(user)
-					pb.ClearUserMessages(user)
-					pb.SendSuccessMessage(update.Message.Chat.ID)
+					pb.ClearUserMessages(user, false)
+					pb.SendSuccessMessage(user.ChatId)
 				}
 			}
+		}
+
+		//delete banned user message
+		if update.Message.LeftChatMember != nil && update.Message.From.UserName == pb.Settings.HimselfUserName {
+			go pb.Client.Request(tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID))
 		}
 	}
 }
@@ -131,8 +136,10 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 		UserNickName: update.Message.From.UserName,
 		CancelBan:    &cancelBan,
 	}
-	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
+
+	//joined message
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, update.Message.MessageID)
+	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
 
 	go pb.WaitAndBan(&newUser)
 
@@ -187,7 +194,7 @@ func (pb *ProtectBot) WaitAndBan(user *User) {
 		log.Printf("User: %v was banned in chat: %v for: %v minutes", user.UserId, user.ChatId, pb.Settings.BanTime)
 	}
 
-	pb.ClearUserMessages(user)
+	pb.ClearUserMessages(user, true)
 }
 
 func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
@@ -211,9 +218,14 @@ func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
 	return true
 }
 
-func (pb *ProtectBot) ClearUserMessages(user *User) {
-	for _, msg := range user.MessagesToDelete {
-		go pb.Client.Request(tgbotapi.NewDeleteMessage(user.ChatId, msg))
+func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
+	//skip joined message
+	if !banned {
+		user.MessagesToDelete = user.MessagesToDelete[1:]
+	}
+
+	for _, msgId := range user.MessagesToDelete {
+		go pb.Client.Request(tgbotapi.NewDeleteMessage(user.ChatId, msgId))
 	}
 }
 
@@ -235,7 +247,9 @@ func (pb *ProtectBot) SendUserStatusToAdmin(user *User) {
 }
 
 func (pb *ProtectBot) SendMessageToAdmin(msg string) {
-	pb.Client.Send(tgbotapi.NewMessage(pb.Settings.AdminChatId, msg))
+	if pb.Settings.AdminChatId != 0 {
+		pb.Client.Send(tgbotapi.NewMessage(pb.Settings.AdminChatId, msg))
+	}
 }
 
 func (pb *ProtectBot) SendSuccessMessage(chatId int64) {
