@@ -246,10 +246,10 @@ func (pb *ProtectBot) DisallowUserSendMessages(chatId, memberId int64) {
 			UserID: memberId,
 		},
 		Permissions: &tgbotapi.ChatPermissions{
-			CanSendMessages:      true,
-			CanSendMediaMessages: true,
-			CanSendPolls:         true,
-			CanSendOtherMessages: true,
+			CanSendMessages:      false,
+			CanSendMediaMessages: false,
+			CanSendPolls:         false,
+			CanSendOtherMessages: false,
 		},
 	}
 
