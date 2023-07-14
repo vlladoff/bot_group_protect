@@ -55,7 +55,7 @@ func (pb *ProtectBot) StartBot() {
 		if update.CallbackQuery != nil {
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
-					copyUser := user
+					copyUser := *user
 					pb.EndChallenge(user)
 					pb.ClearUserMessages(user, false)
 					pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
@@ -298,5 +298,5 @@ func (pb *ProtectBot) SendMessageToAdmin(msg string) {
 func (pb *ProtectBot) SendSuccessMessage(chatId int64, replyMessageId int) {
 	msg := tgbotapi.NewMessage(chatId, pb.Settings.SuccessMessage)
 	msg.ReplyToMessageID = replyMessageId
-	pb.Client.Send(tgbotapi.NewMessage(chatId, pb.Settings.SuccessMessage))
+	pb.Client.Send(msg)
 }
