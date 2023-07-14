@@ -55,9 +55,12 @@ func (pb *ProtectBot) StartBot() {
 		if update.CallbackQuery != nil {
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
+					copyUser := *user
 					pb.EndChallenge(user)
 					pb.ClearUserMessages(user, false)
-					pb.SendSuccessMessage(user.ChatId)
+					pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
+				} else {
+					pb.WaitAndBan(0, user)
 				}
 			}
 		}
@@ -143,7 +146,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, update.Message.MessageID)
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
 
-	go pb.WaitAndBan(&newUser)
+	go pb.WaitAndBan(pb.Settings.ChallengeTime, &newUser)
 
 	return &newUser
 }
@@ -184,8 +187,10 @@ func (pb *ProtectBot) EndChallenge(user *User) {
 	pb.AllowUserSendMessages(user.ChatId, user.UserId)
 }
 
-func (pb *ProtectBot) WaitAndBan(user *User) {
-	time.Sleep(time.Second * time.Duration(pb.Settings.ChallengeTime))
+func (pb *ProtectBot) WaitAndBan(waitTime int32, user *User) {
+	if waitTime != 0 {
+		time.Sleep(time.Second * time.Duration(waitTime))
+	}
 
 	defer pb.DeleteUser(user)
 	defer pb.SendUserStatusToAdmin(user)
@@ -290,6 +295,8 @@ func (pb *ProtectBot) SendMessageToAdmin(msg string) {
 	}
 }
 
-func (pb *ProtectBot) SendSuccessMessage(chatId int64) {
-	pb.Client.Send(tgbotapi.NewMessage(chatId, pb.Settings.SuccessMessage))
+func (pb *ProtectBot) SendSuccessMessage(chatId int64, replyMessageId int) {
+	msg := tgbotapi.NewMessage(chatId, pb.Settings.SuccessMessage)
+	msg.ReplyToMessageID = replyMessageId
+	pb.Client.Send(msg)
 }
