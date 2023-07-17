@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,8 @@ func (pb *ProtectBot) StartBot() {
 	newUsers := make(map[int64]*User)
 	pb.NewUsers = &newUsers
 
+	var mu sync.Mutex
+
 	updates := pb.Client.GetUpdatesChan(u)
 	for update := range updates {
 		if update.Message != nil {
@@ -39,8 +42,10 @@ func (pb *ProtectBot) StartBot() {
 			if update.Message.NewChatMembers != nil {
 				for _, member := range update.Message.NewChatMembers {
 					if member.ID == update.Message.From.ID {
-						newUser := pb.StartChallenge(update)
+						newUser := pb.StartChallenge(update, &mu)
+						mu.Lock()
 						(*pb.NewUsers)[member.ID] = newUser
+						mu.Unlock()
 					}
 				}
 			}
@@ -53,6 +58,7 @@ func (pb *ProtectBot) StartBot() {
 
 		//check new member answer
 		if update.CallbackQuery != nil {
+			mu.Lock()
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
 					copyUser := *user
@@ -60,9 +66,10 @@ func (pb *ProtectBot) StartBot() {
 					pb.ClearUserMessages(user, false)
 					pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
 				} else {
-					pb.WaitAndBan(0, user)
+					pb.WaitAndBan(0, user, &mu)
 				}
 			}
+			mu.Unlock()
 		}
 	}
 }
@@ -121,7 +128,7 @@ var emojiMap = map[string]string{
 	"сердечко":    "❤️",
 }
 
-func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
+func (pb *ProtectBot) StartChallenge(update tgbotapi.Update, mu *sync.Mutex) *User {
 	pb.DisallowUserSendMessages(update.Message.Chat.ID, update.Message.From.ID)
 
 	emojiKey, keyboard := GenerateKeyboard()
@@ -146,7 +153,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, update.Message.MessageID)
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
 
-	go pb.WaitAndBan(pb.Settings.ChallengeTime, &newUser)
+	go pb.WaitAndBan(pb.Settings.ChallengeTime, &newUser, mu)
 
 	return &newUser
 }
@@ -187,12 +194,12 @@ func (pb *ProtectBot) EndChallenge(user *User) {
 	pb.AllowUserSendMessages(user.ChatId, user.UserId)
 }
 
-func (pb *ProtectBot) WaitAndBan(waitTime int32, user *User) {
+func (pb *ProtectBot) WaitAndBan(waitTime int32, user *User, mu *sync.Mutex) {
 	if waitTime != 0 {
 		time.Sleep(time.Second * time.Duration(waitTime))
 	}
 
-	defer pb.DeleteUser(user)
+	defer pb.DeleteUser(user, mu)
 	defer pb.SendUserStatusToAdmin(user)
 
 	if *user.CancelBan {
@@ -238,10 +245,12 @@ func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
 	}
 }
 
-func (pb *ProtectBot) DeleteUser(user *User) {
+func (pb *ProtectBot) DeleteUser(user *User, mu *sync.Mutex) {
+	mu.Lock()
 	if _, ok := (*pb.NewUsers)[user.UserId]; ok {
 		delete(*pb.NewUsers, user.UserId)
 	}
+	mu.Unlock()
 }
 
 func (pb *ProtectBot) DisallowUserSendMessages(chatId, memberId int64) {
