@@ -58,7 +58,6 @@ func (pb *ProtectBot) StartBot() {
 
 		//check new member answer
 		if update.CallbackQuery != nil {
-			mu.Lock()
 			if user, ok := (*pb.NewUsers)[update.CallbackQuery.From.ID]; ok {
 				if update.CallbackQuery.Data == user.NeedToAnswer {
 					copyUser := *user
@@ -69,7 +68,6 @@ func (pb *ProtectBot) StartBot() {
 					pb.WaitAndBan(0, user, &mu)
 				}
 			}
-			mu.Unlock()
 		}
 	}
 }
@@ -246,11 +244,11 @@ func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
 }
 
 func (pb *ProtectBot) DeleteUser(user *User, mu *sync.Mutex) {
-	mu.Lock()
 	if _, ok := (*pb.NewUsers)[user.UserId]; ok {
+		mu.Lock()
 		delete(*pb.NewUsers, user.UserId)
+		mu.Unlock()
 	}
-	mu.Unlock()
 }
 
 func (pb *ProtectBot) DisallowUserSendMessages(chatId, memberId int64) {
