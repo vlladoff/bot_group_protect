@@ -134,7 +134,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 }
 
 func getRandomCode(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 	b := make([]byte, length)
 	for i := range b {
