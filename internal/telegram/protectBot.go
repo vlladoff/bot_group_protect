@@ -114,6 +114,10 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	msg.ReplyToMessageID = update.Message.MessageID
 	resp, _ := pb.Client.Send(msg)
 
+	pb.UploadWelcomeGif()
+	gifMsg := tgbotapi.NewAnimation(update.Message.Chat.ID, tgbotapi.FileID(pb.Settings.WelcomeGifId))
+	gifResp, _ := pb.Client.Send(gifMsg)
+
 	cancelBan := false
 	newUser := User{
 		NeedToAnswer: verifyCode,
@@ -127,6 +131,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	// joined message
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, update.Message.MessageID)
 	newUser.MessagesToDelete = append(newUser.MessagesToDelete, resp.MessageID)
+	newUser.MessagesToDelete = append(newUser.MessagesToDelete, gifResp.MessageID)
 
 	go pb.WaitAndBan(pb.Settings.ChallengeTime, &newUser)
 
@@ -289,4 +294,28 @@ func (pb *ProtectBot) CleanBotMessages() {
 			go pb.Client.Request(tgbotapi.NewDeleteMessage(chatId, messageId))
 		}
 	}
+}
+
+func (pb *ProtectBot) UploadWelcomeGif() {
+	if pb.Settings.WelcomeGifId == "" {
+		if pb.Settings.WelcomeGifPath != "" {
+			gifId, _ := pb.UploadGif(pb.Settings.WelcomeGifPath)
+			if gifId != "" {
+				pb.Settings.WelcomeGifId = gifId
+			}
+		}
+	}
+}
+
+func (pb *ProtectBot) UploadGif(filePath string) (string, error) {
+	file := tgbotapi.FilePath(filePath)
+	gifConfig := tgbotapi.NewAnimation(pb.Settings.AdminChatId, file)
+	resp, err := pb.Client.Send(gifConfig)
+	if err != nil {
+		return "", err
+	}
+
+	pb.SendMessageToAdmin("Id welcome файла gif: " + resp.Animation.FileID + "\nДобавьте его в конфигурационный файл ")
+
+	return resp.Animation.FileID, nil
 }

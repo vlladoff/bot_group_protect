@@ -16,6 +16,8 @@ type (
 		CleanMessagesTime int64  `mapstructure:"TG_BOT_GROUP_PROTECT_CLEAN_MESSAGES_TIME"`
 		BanTime           int64  `mapstructure:"TG_BOT_GROUP_PROTECT_BAN_TIME"` // 0 - forever
 		AdminChatId       int64  `mapstructure:"TG_BOT_GROUP_PROTECT_ADMIN_CHAT_ID"`
+		WelcomeGifId      string `mapstructure:"TG_BOT_GROUP_PROTECT_WELCOME_GIF_ID"`
+		WelcomeGifPath    string `mapstructure:"TG_BOT_GROUP_PROTECT_WELCOME_GIF_PATH"`
 	}
 )
 
