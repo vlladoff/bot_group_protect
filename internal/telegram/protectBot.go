@@ -1,13 +1,14 @@
 package telegram
 
 import (
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/vlladoff/bot_group_protect/internal/config"
 	"log"
 	"math/rand"
 	"strconv"
 	"sync"
 	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/vlladoff/bot_group_protect/internal/config"
 )
 
 type (
@@ -17,6 +18,7 @@ type (
 		WelcomeMessageIds      map[int]int64
 		LastWelcomeMessageTime int64
 		NewUsers               map[int64]*User
+		EnabledChats           map[int64]bool
 		Mu                     sync.Mutex
 	}
 	User struct {
@@ -27,14 +29,28 @@ type (
 		UserNickName     string
 		UserId           int64
 		CancelBan        *bool
+		Attempts         int
 	}
 )
+
+func NewProtectBot(botToken string, settings config.BotSettings) (*ProtectBot, error) {
+	client, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProtectBot{
+		Client:            client,
+		Settings:          settings,
+		WelcomeMessageIds: make(map[int]int64),
+		NewUsers:          make(map[int64]*User),
+		EnabledChats:      make(map[int64]bool),
+	}, nil
+}
 
 func (pb *ProtectBot) StartBot() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
-	pb.NewUsers = make(map[int64]*User)
-	pb.WelcomeMessageIds = make(map[int]int64)
 
 	updates := pb.Client.GetUpdatesChan(u)
 	for update := range updates {
@@ -44,6 +60,15 @@ func (pb *ProtectBot) StartBot() {
 
 func (pb *ProtectBot) Update(update tgbotapi.Update) {
 	if update.Message != nil {
+		if update.Message.IsCommand() {
+			pb.handleCommand(update)
+			return
+		}
+
+		if !pb.IsChatEnabled(update.Message.Chat.ID) {
+			return
+		}
+
 		// bot health check
 		if update.Message.Text == "PING" {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "PONG")
@@ -59,6 +84,11 @@ func (pb *ProtectBot) Update(update tgbotapi.Update) {
 		}
 
 		// new member joined
+		if update.Message.NewChatMembers != nil {
+			pb.handleNewMembers(update)
+			return
+		}
+
 		if update.Message.NewChatMembers != nil {
 			for _, member := range update.Message.NewChatMembers {
 				if member.ID == update.Message.From.ID {
@@ -80,25 +110,95 @@ func (pb *ProtectBot) Update(update tgbotapi.Update) {
 		}
 
 		// check new member answer
-		var userNeedToCheck *User
-		var checkAnswer bool
+		pb.checkUserAnswer(update)
+	}
+}
+
+func (pb *ProtectBot) handleCommand(update tgbotapi.Update) {
+	command := update.Message.Command()
+	chatID := update.Message.Chat.ID
+	userID := update.Message.From.ID
+
+	switch command {
+	case "enable":
+		if pb.isUserAdmin(chatID, userID) {
+			pb.setChatEnabled(chatID, true)
+			pb.sendMessage(chatID, "Бот активирован ✅", update.Message.MessageID)
+		}
+	case "disable":
+		if pb.isUserAdmin(chatID, userID) {
+			pb.setChatEnabled(chatID, false)
+			pb.sendMessage(chatID, "Бот деактивирован 🛑", update.Message.MessageID)
+		}
+	}
+}
+
+func (pb *ProtectBot) setChatEnabled(chatID int64, enabled bool) {
+	pb.Mu.Lock()
+	defer pb.Mu.Unlock()
+	pb.EnabledChats[chatID] = enabled
+}
+
+func (pb *ProtectBot) IsChatEnabled(chatID int64) bool {
+	pb.Mu.Lock()
+	defer pb.Mu.Unlock()
+	return pb.EnabledChats[chatID]
+}
+
+func (pb *ProtectBot) sendMessage(chatID int64, text string, replyMessageID int) int {
+	msg := tgbotapi.NewMessage(chatID, text)
+
+	if replyMessageID != 0 {
+		msg.ReplyToMessageID = replyMessageID
+	}
+
+	resp, _ := pb.Client.Send(msg)
+
+	if resp.MessageID != 0 {
+		return resp.MessageID
+	}
+
+	return 0
+}
+
+func (pb *ProtectBot) checkUserAnswer(update tgbotapi.Update) {
+	pb.Mu.Lock()
+	user, exists := pb.NewUsers[update.Message.From.ID]
+	pb.Mu.Unlock()
+
+	if !exists {
+		return
+	}
+
+	user.MessagesToDelete = append(user.MessagesToDelete, update.Message.MessageID)
+
+	if update.Message.Text == user.NeedToAnswer {
+		copyUser := *user
+		pb.EndChallenge(user)
+		pb.ClearUserMessages(user, false)
+		pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
+	} else {
+		user.Attempts--
+		if user.Attempts > 0 {
+			msgId := pb.sendMessage(user.ChatId, "Неверный код. У вас осталась одна попытка.", update.Message.MessageID)
+			pb.DeleteMessageById(user.ChatId, update.Message.MessageID)
+			user.MessagesToDelete = append(user.MessagesToDelete, msgId)
+		} else {
+			pb.WaitAndBan(0, user)
+		}
+	}
+}
+
+func (pb *ProtectBot) handleNewMembers(update tgbotapi.Update) {
+	if pb.isUserAdmin(update.Message.Chat.ID, update.Message.From.ID) {
+		return
+	}
+
+	for _, member := range update.Message.NewChatMembers {
+		newUser := pb.StartChallenge(update)
 		pb.Mu.Lock()
-		if checkUser, userExist := pb.NewUsers[update.Message.From.ID]; userExist {
-			userNeedToCheck = checkUser
-			checkAnswer = userExist
-		}
+		pb.NewUsers[member.ID] = newUser
 		pb.Mu.Unlock()
-		if checkAnswer {
-			userNeedToCheck.MessagesToDelete = append(userNeedToCheck.MessagesToDelete, update.Message.MessageID)
-			if update.Message.Text == userNeedToCheck.NeedToAnswer {
-				copyUser := *userNeedToCheck
-				pb.EndChallenge(userNeedToCheck)
-				pb.ClearUserMessages(userNeedToCheck, false)
-				pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
-			} else {
-				pb.WaitAndBan(0, userNeedToCheck)
-			}
-		}
 	}
 }
 
@@ -126,6 +226,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 		UserName:     update.Message.From.FirstName + " " + update.Message.From.LastName,
 		UserNickName: update.Message.From.UserName,
 		CancelBan:    &cancelBan,
+		Attempts:     2,
 	}
 
 	// joined message
@@ -194,6 +295,10 @@ func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
 	}
 
 	return true
+}
+
+func (pb *ProtectBot) DeleteMessageById(chatId int64, msgId int) {
+	pb.Client.Request(tgbotapi.NewDeleteMessage(chatId, msgId))
 }
 
 func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
@@ -286,6 +391,17 @@ func (pb *ProtectBot) SendSuccessMessage(chatId int64, replyMessageId int) {
 	pb.WelcomeMessageIds[sentMessage.MessageID] = chatId
 	currentTime := time.Now().UnixNano()
 	pb.LastWelcomeMessageTime = currentTime
+}
+
+func (pb *ProtectBot) isUserAdmin(chatID int64, userID int64) bool {
+	member, err := pb.Client.GetChatMember(tgbotapi.GetChatMemberConfig{
+		ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
+			ChatID: chatID,
+			UserID: userID,
+		},
+	})
+
+	return err == nil && (member.IsAdministrator() || member.IsCreator() || pb.Settings.AdminId == userID)
 }
 
 func (pb *ProtectBot) CleanBotMessages() {
