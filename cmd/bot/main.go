@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"log"
+
 	"github.com/vlladoff/bot_group_protect/internal/config"
 	"github.com/vlladoff/bot_group_protect/internal/telegram"
-	"log"
 )
 
 func main() {
@@ -17,14 +17,6 @@ func main() {
 		log.Fatal("cannot load cfg:", err)
 	}
 
-	var tg telegram.ProtectBot
-	bot, err := tgbotapi.NewBotAPI(cfg.BotToken)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	tg.Client = bot
-	tg.Settings = cfg.BotSettings
-
+	tg, _ := telegram.NewProtectBot(cfg.BotToken, cfg.BotSettings)
 	tg.StartBot()
 }
