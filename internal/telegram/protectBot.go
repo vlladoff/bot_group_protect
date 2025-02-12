@@ -1,8 +1,10 @@
 package telegram
 
 import (
+	"encoding/json"
 	"log"
 	"math/rand"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -19,7 +21,9 @@ type (
 		LastWelcomeMessageTime int64
 		NewUsers               map[int64]*User
 		EnabledChats           map[int64]bool
+		StorageFile            string
 		Mu                     sync.Mutex
+		FileMu                 sync.Mutex
 	}
 	User struct {
 		NeedToAnswer     string
@@ -33,19 +37,58 @@ type (
 	}
 )
 
-func NewProtectBot(botToken string, settings config.BotSettings) (*ProtectBot, error) {
+func NewProtectBot(botToken string, settings config.BotSettings, storageFile string) (*ProtectBot, error) {
 	client, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		return nil, err
 	}
 
-	return &ProtectBot{
+	pb := &ProtectBot{
 		Client:            client,
 		Settings:          settings,
 		WelcomeMessageIds: make(map[int]int64),
 		NewUsers:          make(map[int64]*User),
 		EnabledChats:      make(map[int64]bool),
-	}, nil
+		StorageFile:       storageFile,
+	}
+
+	err = pb.loadEnabledChats()
+	if err != nil {
+		log.Printf("Error loading enabled chats: %v", err)
+	}
+
+	return pb, nil
+}
+
+func (pb *ProtectBot) saveEnabledChats() error {
+	pb.FileMu.Lock()
+	defer pb.FileMu.Unlock()
+
+	file, err := os.Create(pb.StorageFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	return encoder.Encode(pb.EnabledChats)
+}
+
+func (pb *ProtectBot) loadEnabledChats() error {
+	pb.FileMu.Lock()
+	defer pb.FileMu.Unlock()
+
+	file, err := os.Open(pb.StorageFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return pb.saveEnabledChats()
+		}
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	return decoder.Decode(&pb.EnabledChats)
 }
 
 func (pb *ProtectBot) StartBot() {
@@ -135,8 +178,12 @@ func (pb *ProtectBot) handleCommand(update tgbotapi.Update) {
 
 func (pb *ProtectBot) setChatEnabled(chatID int64, enabled bool) {
 	pb.Mu.Lock()
-	defer pb.Mu.Unlock()
 	pb.EnabledChats[chatID] = enabled
+	pb.Mu.Unlock()
+
+	if err := pb.saveEnabledChats(); err != nil {
+		log.Printf("Error saving enabled chats: %v", err)
+	}
 }
 
 func (pb *ProtectBot) IsChatEnabled(chatID int64) bool {
