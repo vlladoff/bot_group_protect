@@ -21,7 +21,6 @@ type (
 		LastWelcomeMessageTime int64
 		NewUsers               map[int64]*User
 		EnabledChats           map[int64]bool
-		StorageFile            string
 		Mu                     sync.Mutex
 		FileMu                 sync.Mutex
 	}
@@ -37,7 +36,7 @@ type (
 	}
 )
 
-func NewProtectBot(botToken string, settings config.BotSettings, storageFile string) (*ProtectBot, error) {
+func NewProtectBot(botToken string, settings config.BotSettings) (*ProtectBot, error) {
 	client, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		return nil, err
@@ -49,7 +48,6 @@ func NewProtectBot(botToken string, settings config.BotSettings, storageFile str
 		WelcomeMessageIds: make(map[int]int64),
 		NewUsers:          make(map[int64]*User),
 		EnabledChats:      make(map[int64]bool),
-		StorageFile:       storageFile,
 	}
 
 	err = pb.loadEnabledChats()
@@ -64,7 +62,7 @@ func (pb *ProtectBot) saveEnabledChats() error {
 	pb.FileMu.Lock()
 	defer pb.FileMu.Unlock()
 
-	file, err := os.Create(pb.StorageFile)
+	file, err := os.Create(pb.Settings.EnableChatsFilePath)
 	if err != nil {
 		return err
 	}
@@ -78,7 +76,7 @@ func (pb *ProtectBot) loadEnabledChats() error {
 	pb.FileMu.Lock()
 	defer pb.FileMu.Unlock()
 
-	file, err := os.Open(pb.StorageFile)
+	file, err := os.Open(pb.Settings.EnableChatsFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return pb.saveEnabledChats()
