@@ -127,23 +127,9 @@ func (pb *ProtectBot) Update(update tgbotapi.Update) {
 			return
 		}
 
-		if update.Message.NewChatMembers != nil {
-			for _, member := range update.Message.NewChatMembers {
-				if member.ID == update.Message.From.ID {
-					newUser := pb.StartChallenge(update)
-					pb.Mu.Lock()
-					pb.NewUsers[member.ID] = newUser
-					pb.Mu.Unlock()
-
-					return
-				}
-			}
-		}
-
 		// delete banned user message
 		if update.Message.LeftChatMember != nil && update.Message.From.UserName == pb.Settings.HimselfUserName {
 			go pb.Client.Request(tgbotapi.NewDeleteMessage(update.Message.Chat.ID, update.Message.MessageID))
-
 			return
 		}
 
@@ -224,6 +210,10 @@ func (pb *ProtectBot) checkUserAnswer(update tgbotapi.Update) {
 		pb.EndChallenge(user)
 		pb.ClearUserMessages(user, false)
 		pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
+
+		pb.Mu.Lock()
+		delete(pb.NewUsers, update.Message.From.ID)
+		pb.Mu.Unlock()
 	} else {
 		user.Attempts--
 		if user.Attempts > 0 {
@@ -242,15 +232,20 @@ func (pb *ProtectBot) handleNewMembers(update tgbotapi.Update) {
 	}
 
 	for _, member := range update.Message.NewChatMembers {
-		newUser := pb.StartChallenge(update)
+		if update.Message.From.ID != member.ID {
+			log.Printf("User %d was invited by %d - skipping challenge", member.ID, update.Message.From.ID)
+			continue
+		}
+
+		newUser := pb.StartChallenge(update, member.ID)
 		pb.Mu.Lock()
 		pb.NewUsers[member.ID] = newUser
 		pb.Mu.Unlock()
 	}
 }
 
-func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
-	//pb.DisallowUserSendMessages(update.Message.Chat.ID, update.Message.From.ID)
+func (pb *ProtectBot) StartChallenge(update tgbotapi.Update, userId int64) *User {
+	// pb.DisallowUserSendMessages(update.Message.Chat.ID, userId)
 
 	verifyCode := getRandomCode(4)
 
@@ -269,7 +264,7 @@ func (pb *ProtectBot) StartChallenge(update tgbotapi.Update) *User {
 	newUser := User{
 		NeedToAnswer: verifyCode,
 		ChatId:       update.Message.Chat.ID,
-		UserId:       update.Message.From.ID,
+		UserId:       userId,
 		UserName:     update.Message.From.FirstName + " " + update.Message.From.LastName,
 		UserNickName: update.Message.From.UserName,
 		CancelBan:    &cancelBan,
@@ -338,6 +333,7 @@ func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
 
 	_, err := pb.Client.Request(banChatMemberConfig)
 	if err != nil {
+		log.Printf("Error banning user %d: %v", memberId, err)
 		return false
 	}
 
@@ -345,7 +341,10 @@ func (pb *ProtectBot) BanUser(chatId, memberId int64) bool {
 }
 
 func (pb *ProtectBot) DeleteMessageById(chatId int64, msgId int) {
-	pb.Client.Request(tgbotapi.NewDeleteMessage(chatId, msgId))
+	_, err := pb.Client.Request(tgbotapi.NewDeleteMessage(chatId, msgId))
+	if err != nil {
+		log.Printf("Error deleting message %d: %v", msgId, err)
+	}
 }
 
 func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
@@ -354,7 +353,7 @@ func (pb *ProtectBot) ClearUserMessages(user *User, banned bool) {
 	}
 
 	for _, msgId := range user.MessagesToDelete {
-		go pb.Client.Request(tgbotapi.NewDeleteMessage(user.ChatId, msgId))
+		go pb.DeleteMessageById(user.ChatId, msgId)
 	}
 }
 
@@ -380,7 +379,10 @@ func (pb *ProtectBot) DisallowUserSendMessages(chatId, memberId int64) {
 		},
 	}
 
-	go pb.Client.Request(restrictConfig)
+	_, err := pb.Client.Request(restrictConfig)
+	if err != nil {
+		log.Printf("Error restricting user %d: %v", memberId, err)
+	}
 }
 
 func (pb *ProtectBot) AllowUserSendMessages(chatId, memberId int64) {
@@ -397,16 +399,20 @@ func (pb *ProtectBot) AllowUserSendMessages(chatId, memberId int64) {
 		},
 	}
 
-	go pb.Client.Request(restrictConfig)
+	_, err := pb.Client.Request(restrictConfig)
+	if err != nil {
+		log.Printf("Error allowing messages for user %d: %v", memberId, err)
+	}
 }
 
 func (pb *ProtectBot) ChangeGroupDescription(chatId int64, text string) {
-	descriptionConfig := tgbotapi.SetChatDescriptionConfig{
+	_, err := pb.Client.Request(tgbotapi.SetChatDescriptionConfig{
 		ChatID:      chatId,
 		Description: text,
+	})
+	if err != nil {
+		log.Printf("Error changing group description: %v", err)
 	}
-
-	pb.Client.Request(descriptionConfig)
 }
 
 func (pb *ProtectBot) SendUserStatusToAdmin(user *User) {
@@ -431,6 +437,7 @@ func (pb *ProtectBot) SendSuccessMessage(chatId int64, replyMessageId int) {
 	msg.ReplyToMessageID = replyMessageId
 	sentMessage, err := pb.Client.Send(msg)
 	if err != nil {
+		log.Printf("Error sending success message: %v", err)
 		return
 	}
 
@@ -453,9 +460,11 @@ func (pb *ProtectBot) isUserAdmin(chatID int64, userID int64) bool {
 
 func (pb *ProtectBot) CleanBotMessages() {
 	if len(pb.WelcomeMessageIds) > 1 {
+		tempMap := make(map[int]int64)
 		for messageId, chatId := range pb.WelcomeMessageIds {
 			go pb.Client.Request(tgbotapi.NewDeleteMessage(chatId, messageId))
 		}
+		pb.WelcomeMessageIds = tempMap
 	}
 }
 
