@@ -230,9 +230,8 @@ func (pb *ProtectBot) checkUserAnswer(update tgbotapi.Update) {
 		pb.ClearUserMessages(user, false)
 		pb.SendSuccessMessage(copyUser.ChatId, copyUser.MessagesToDelete[0])
 
-		pb.Mu.Lock()
-		delete(pb.NewUsers, update.Message.From.ID)
-		pb.Mu.Unlock()
+		pb.SendUserStatusToAdmin(user)
+		pb.ClearUserMap(user)
 	} else {
 		user.Attempts--
 		if user.Attempts > 0 {
