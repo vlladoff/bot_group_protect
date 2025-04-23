@@ -17,14 +17,15 @@ import (
 
 type (
 	ProtectBot struct {
-		Client                 *tgbotapi.BotAPI
-		GeminiClient           *gemini.GeminiClient
-		Settings               config.BotSettings
-		WelcomeMessageIds      map[int]int64
-		LastWelcomeMessageTime int64
-		NewUsers               map[int64]*User
-		EnabledChats           map[int64]bool
-		Mu                     sync.Mutex
+		Client                  *tgbotapi.BotAPI
+		GeminiClient            *gemini.GeminiClient
+		Settings                config.BotSettings
+		WelcomeMessageIds       map[int]int64
+		LastWelcomeMessageTime  int64
+		NewUsers                map[int64]*User
+		EnabledChats            map[int64]bool
+		CurrentVerificationCode string
+		Mu                      sync.Mutex
 	}
 	User struct {
 		NeedToAnswer     string
@@ -45,12 +46,13 @@ func NewProtectBot(botToken string, settings config.BotSettings, geminiClient *g
 	}
 
 	pb := &ProtectBot{
-		Client:            client,
-		GeminiClient:      geminiClient,
-		Settings:          settings,
-		WelcomeMessageIds: make(map[int]int64),
-		NewUsers:          make(map[int64]*User),
-		EnabledChats:      make(map[int64]bool),
+		Client:                  client,
+		GeminiClient:            geminiClient,
+		Settings:                settings,
+		WelcomeMessageIds:       make(map[int]int64),
+		NewUsers:                make(map[int64]*User),
+		EnabledChats:            make(map[int64]bool),
+		CurrentVerificationCode: "",
 	}
 
 	pb.loadEnabledChats()
@@ -264,9 +266,13 @@ func (pb *ProtectBot) handleNewMembers(update tgbotapi.Update) {
 func (pb *ProtectBot) StartChallenge(update tgbotapi.Update, userId int64) *User {
 	// pb.DisallowUserSendMessages(update.Message.Chat.ID, userId)
 
-	verifyCode := getRandomCode(4)
-
-	pb.ChangeGroupDescription(update.Message.Chat.ID, pb.Settings.GroupDescription+"\n\nПроверочный код:\n"+verifyCode+"")
+	pb.Mu.Lock()
+	if pb.CurrentVerificationCode == "" {
+		pb.CurrentVerificationCode = getRandomCode(4)
+		pb.ChangeGroupDescription(update.Message.Chat.ID, pb.Settings.GroupDescription+"\n\nПроверочный код:\n"+pb.CurrentVerificationCode+"")
+	}
+	verifyCode := pb.CurrentVerificationCode
+	pb.Mu.Unlock()
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, pb.Settings.WelcomeMessage)
 	msg.ParseMode = "markdown"
@@ -379,6 +385,10 @@ func (pb *ProtectBot) ClearUserMap(user *User) {
 	defer pb.Mu.Unlock()
 	if _, ok := pb.NewUsers[user.UserId]; ok {
 		delete(pb.NewUsers, user.UserId)
+	}
+
+	if len(pb.NewUsers) == 0 {
+		pb.CurrentVerificationCode = ""
 	}
 }
 
