@@ -20,6 +20,7 @@ type (
 		WelcomeGifId        string `mapstructure:"TG_BOT_GROUP_PROTECT_WELCOME_GIF_ID"`
 		WelcomeGifPath      string `mapstructure:"TG_BOT_GROUP_PROTECT_WELCOME_GIF_PATH"`
 		EnableChatsFilePath string `mapstructure:"TG_BOT_GROUP_PROTECT_ENABLE_CHATS_FILE_PATH"`
+		GeminiAPIKey        string `mapstructure:"TG_BOT_GROUP_PROTECT_GEMINI_API_KEY"`
 	}
 )
 

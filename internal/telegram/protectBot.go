@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"math/rand"
@@ -11,11 +12,13 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/vlladoff/bot_group_protect/internal/config"
+	gemini "github.com/vlladoff/bot_group_protect/internal/llm"
 )
 
 type (
 	ProtectBot struct {
 		Client                 *tgbotapi.BotAPI
+		GeminiClient           *gemini.GeminiClient
 		Settings               config.BotSettings
 		WelcomeMessageIds      map[int]int64
 		LastWelcomeMessageTime int64
@@ -35,7 +38,7 @@ type (
 	}
 )
 
-func NewProtectBot(botToken string, settings config.BotSettings) (*ProtectBot, error) {
+func NewProtectBot(botToken string, settings config.BotSettings, geminiClient *gemini.GeminiClient) (*ProtectBot, error) {
 	client, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		return nil, err
@@ -43,6 +46,7 @@ func NewProtectBot(botToken string, settings config.BotSettings) (*ProtectBot, e
 
 	pb := &ProtectBot{
 		Client:            client,
+		GeminiClient:      geminiClient,
 		Settings:          settings,
 		WelcomeMessageIds: make(map[int]int64),
 		NewUsers:          make(map[int64]*User),
@@ -204,6 +208,19 @@ func (pb *ProtectBot) checkUserAnswer(update tgbotapi.Update) {
 	}
 
 	user.MessagesToDelete = append(user.MessagesToDelete, update.Message.MessageID)
+
+	ctx := context.Background()
+	isSpam, err := pb.GeminiClient.IsSpam(ctx, update.Message.Text)
+	if err != nil {
+		log.Printf("Error checking spam: %v", err)
+	}
+
+	if isSpam {
+		log.Printf("Spam detected for user %d: %s", update.Message.From.ID, update.Message.Text)
+		pb.SendMessageToAdmin("Gemini banned user for spam: " + update.Message.Text)
+		pb.WaitAndBan(0, user)
+		return
+	}
 
 	if update.Message.Text == user.NeedToAnswer {
 		copyUser := *user

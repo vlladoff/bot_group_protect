@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 
 	"github.com/vlladoff/bot_group_protect/internal/config"
+	gemini "github.com/vlladoff/bot_group_protect/internal/llm"
 	"github.com/vlladoff/bot_group_protect/internal/telegram"
 )
 
 func main() {
+	ctx := context.Background()
+
 	configPath := flag.String("cfg", ".", "config path")
 	flag.Parse()
 
@@ -17,6 +21,11 @@ func main() {
 		log.Fatal("cannot load cfg:", err)
 	}
 
-	tg, _ := telegram.NewProtectBot(cfg.BotToken, cfg.BotSettings)
+	googleAiClient, err := gemini.NewGeminiClient(ctx, cfg.GeminiAPIKey)
+	if err != nil {
+		log.Fatal("Error creating google ai client: ", err)
+	}
+
+	tg, _ := telegram.NewProtectBot(cfg.BotToken, cfg.BotSettings, googleAiClient)
 	tg.StartBot()
 }
